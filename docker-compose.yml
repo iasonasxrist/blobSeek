@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        TARGET_PROJECT: BlobSeek.Api
+    env_file: .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+    volumes:
+      - blobseek_data:/data
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Worker.Dockerfile
+    env_file: .env
+    environment:
+      DOTNET_ENVIRONMENT: Production
+    volumes:
+      - blobseek_data:/data
+    depends_on:
+      api:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8000:80"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  blobseek_data:

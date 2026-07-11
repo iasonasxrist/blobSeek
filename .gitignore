@@ -1,0 +1,17 @@
+bin/
+obj/
+node_modules/
+dist/
+coverage/
+.env
+*.db
+*.db-shm
+*.db-wal
+lucene/
+.DS_Store
+TestResults/
+test-results/
+playwright-report/
+*.tsbuildinfo
+work/
+outputs/

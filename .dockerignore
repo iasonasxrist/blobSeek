@@ -1,0 +1,11 @@
+.git
+.env
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/coverage
+**/test-results
+**/*.tsbuildinfo
+work
+outputs
