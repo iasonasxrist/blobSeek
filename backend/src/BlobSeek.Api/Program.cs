@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using BlobSeek.Application.Billing;
 using BlobSeek.Application.Indexing;
@@ -144,7 +144,7 @@ api.MapGet("/search", async Task<Results<Ok<SearchResponse>, ProblemHttpResult>>
 .WithName("Search")
 .WithOpenApi();
 
-api.MapGet("/stats", async Task<Results<Ok<object>, ProblemHttpResult>> (
+api.MapGet("/stats", async Task<Results<Ok<IndexingStats>, ProblemHttpResult>> (
     IIndexingStatsReader stats,
     IPaymentAccessService paymentAccess,
     ClaimsPrincipal user,
@@ -156,12 +156,12 @@ api.MapGet("/stats", async Task<Results<Ok<object>, ProblemHttpResult>> (
         return ToProblem(access.Failure, access.Message);
     }
 
-    return TypedResults.Ok<object>(await stats.GetStatsAsync(cancellationToken));
+    return TypedResults.Ok(await stats.GetStatsAsync(cancellationToken));
 })
 .WithName("Stats")
 .WithOpenApi();
 
-api.MapPost("/index/run", async Task<Results<Accepted<object>, ProblemHttpResult>> (
+api.MapPost("/index/run", async Task<Results<Accepted<IndexingRunSummary>, ProblemHttpResult>> (
     IIndexingCoordinator coordinator,
     IPaymentAccessService paymentAccess,
     ClaimsPrincipal user,
@@ -173,7 +173,7 @@ api.MapPost("/index/run", async Task<Results<Accepted<object>, ProblemHttpResult
         return ToProblem(access.Failure, access.Message);
     }
 
-    return TypedResults.Accepted<object>($"/api/stats", await coordinator.RunOnceAsync(cancellationToken));
+    return TypedResults.Accepted($"/api/stats", await coordinator.RunOnceAsync(cancellationToken));
 })
 .WithName("RunIndexing")
 .WithOpenApi();

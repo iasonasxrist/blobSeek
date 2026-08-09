@@ -23,7 +23,7 @@ This project is a from-scratch .NET 8 and React rebuild inspired by the original
 | --------------- | ----------------------------------------------------- |
 | Backend         | .NET 8, ASP.NET Core Minimal APIs, C#                 |
 | Search          | Lucene.NET                                            |
-| State           | EF Core with SQLite                                   |
+| State           | EF Core with PostgreSQL                               |
 | Storage         | Azure.Storage.Blobs, Azure.Identity                   |
 | Background work | ASP.NET Core `BackgroundService`                      |
 | Observability   | Serilog, health checks, OpenAPI                       |
@@ -140,20 +140,9 @@ BlobSeek uses the .NET options pattern, so configuration can come from JSON file
 
 Common settings:
 
-<<<<<<< Updated upstream
-| Setting                                      | Default        | Purpose                                 |
-| -------------------------------------------- | -------------- | --------------------------------------- |
-| `BlobSeek__Storage__SasExpiryMinutes`        | `60`           | Download link lifetime                  |
-| `BlobSeek__Indexing__BatchSize`              | `100`          | Commit/save cadence                     |
-| `BlobSeek__Indexing__MaxConcurrency`         | `4`            | Concurrent blob processing              |
-| `BlobSeek__Indexing__PollingIntervalSeconds` | `300`          | Worker delay between sync passes        |
-| `BlobSeek__Indexing__MaxBlobMegabytes`       | `50`           | Metadata-only threshold for large blobs |
-| `BlobSeek__Indexing__MaxTextCharacters`      | `50000`        | Extracted text cap per blob             |
-| `BlobSeek__Indexing__DataDirectory`          | `/data`        | SQLite and operational data path        |
-| `BlobSeek__Search__IndexDirectory`           | `/data/lucene` | Lucene index path                       |
-=======
 | Setting | Default | Purpose |
 | --- | --- | --- |
+| `ConnectionStrings__BlobSeek` | Docker Postgres | PostgreSQL database connection |
 | `BlobSeek__Storage__SasExpiryMinutes` | `60` | Download link lifetime |
 | `BlobSeek__Indexing__BatchSize` | `100` | Commit/save cadence |
 | `BlobSeek__Indexing__MaxConcurrency` | `4` | Concurrent blob processing |
@@ -162,7 +151,16 @@ Common settings:
 | `BlobSeek__Indexing__MaxTextCharacters` | `50000` | Extracted text cap per blob |
 | `BlobSeek__Indexing__DataDirectory` | `/data` | Lucene and operational file data path |
 | `BlobSeek__Search__IndexDirectory` | `/data/lucene` | Lucene index path |
->>>>>>> Stashed changes
+| `VITE_CLERK_PUBLISHABLE_KEY` | empty | Enables Clerk sign-up/login in the React app |
+| `Clerk__Issuer` | empty | Enables backend Clerk JWT validation when set |
+| `Stripe__SecretKey` | empty | Stripe secret key used by the API to create checkout sessions |
+| `Stripe__Prices__pro` | empty | Stripe recurring price ID for the Pro plan |
+| `Stripe__Prices__team` | empty | Stripe recurring price ID for the Team plan |
+| `Stripe__Prices__business` | empty | Stripe recurring price ID for the Business plan |
+| `Stripe__SuccessUrl` | localhost | Checkout success redirect URL |
+| `Stripe__CancelUrl` | localhost | Checkout cancellation redirect URL |
+| `Billing__RequireActiveSubscription` | `true` | Enforces server-side paid access checks for search, download, stats, and manual indexing |
+| `Billing__PaidUserIds__0` | empty | Clerk user ID allowed to use paid features until webhook-backed entitlements are added |
 
 You may use `ServiceUri` instead of `ConnectionString` to authenticate with `DefaultAzureCredential`:
 
@@ -171,6 +169,26 @@ BlobSeek__Storage__Accounts__0__ServiceUri=https://myaccount.blob.core.windows.n
 ```
 
 SAS download links require credentials that can sign SAS URLs. Managed identity is suitable for indexing, but may need a separate download strategy if the credential cannot generate SAS links.
+
+
+## Authentication And Billing
+
+BlobSeek supports a SaaS-ready sign-up and payment flow:
+
+- Clerk powers sign-up, login, sessions, and the protected `/search` console.
+- The frontend sends Clerk bearer tokens to the API when auth is enabled.
+- The API validates Clerk JWTs when `Clerk__Issuer` is configured.
+- Plans are represented by the `BillingPlan` enum: `pro`, `team`, and `business`.
+- Stripe Checkout creates recurring subscriptions through an `IPaymentGateway` implementation, so another provider can be added without changing endpoint code.
+- Stripe automatic tax and tax ID collection are enabled on checkout sessions.
+- When `Billing__RequireActiveSubscription=true`, search, stats, download, and manual indexing are denied unless the server-side payment access service recognizes the Clerk user as paid.
+
+Create recurring Stripe Prices for each plan, then place the resulting `price_...` IDs in `.env`. For production, configure Stripe Tax and confirm your tax registrations/compliance with an accountant. Stripe calculates and collects tax data for configured regions, but it does not replace legal/tax advice.
+
+
+Payment access is intentionally checked on the server. The client can choose a checkout plan, but it cannot unlock search by sending a plan name. For production SaaS, replace or extend `ConfiguredPaymentAccessService` with Stripe webhook-backed entitlements in PostgreSQL.
+
+For pure B2C with minimal tax operations, a Merchant of Record such as Paddle or Lemon Squeezy may still be simpler. This implementation uses Stripe because you asked to use Stripe for all payments.
 
 ## Supported Content
 
@@ -202,6 +220,7 @@ Files larger than `BlobSeek__Indexing__MaxBlobMegabytes` are indexed by metadata
 | `GET`  | `/api/stats`                                                                   | Read indexing status and statistics |
 | `POST` | `/api/index/run`                                                               | Trigger an indexing pass            |
 | `GET`  | `/api/download?storageAccount=primary&container=uploads&path=2026/invoice.pdf` | Create a short-lived download link  |
+| `POST` | `/api/billing/checkout`                                                       | Create a Stripe subscription checkout session |
 | `GET`  | `/health`                                                                      | Health check endpoint               |
 
 Swagger UI is available in development.
