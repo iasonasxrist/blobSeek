@@ -29,6 +29,7 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(BillingOptions.SectionName));
         services.AddOptions<StripeOptions>()
             .Bind(configuration.GetSection(StripeOptions.SectionName));
+        services.AddSingleton(TimeProvider.System);
 
         var options = configuration.GetSection(BlobSeekOptions.SectionName).Get<BlobSeekOptions>() ?? new BlobSeekOptions();
         var dataDirectory = options.Indexing.DataDirectory;
@@ -45,6 +46,8 @@ public static class DependencyInjection
         services.AddSingleton<ISearchIndex, LuceneSearchIndex>();
         services.AddScoped<IIndexingCoordinator, IndexingCoordinator>();
         services.AddScoped<IIndexingStatsReader, IndexingStatsReader>();
+        services.AddScoped<ICheckoutSessionStore, EfCheckoutSessionStore>();
+        services.AddScoped<IBillingEntitlementStore, EfBillingEntitlementStore>();
         services.AddScoped<IBillingCheckoutService, BillingCheckoutService>();
         services.AddScoped<IPaymentAccessService, ConfiguredPaymentAccessService>();
         services.AddScoped<IPaymentGateway, StripePaymentGateway>();

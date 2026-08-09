@@ -38,9 +38,12 @@ public sealed class StripePaymentGateway(IOptions<StripeOptions> options) : IPay
             {
                 Metadata = MetadataFor(request)
             }
+        }, new RequestOptions
+        {
+            IdempotencyKey = request.IdempotencyKey
         }, cancellationToken: cancellationToken);
 
-        return new PaymentCheckoutSession(session.Url);
+        return new PaymentCheckoutSession(session.Url, session.Id);
     }
 
     private static Dictionary<string, string> MetadataFor(PaymentCheckoutSessionRequest request) => new()

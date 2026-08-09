@@ -3,31 +3,36 @@ using Microsoft.Extensions.Options;
 
 namespace BlobSeek.Infrastructure.Billing;
 
-public sealed class ConfiguredPaymentAccessService(IOptions<BillingOptions> options) : IPaymentAccessService
+public sealed class ConfiguredPaymentAccessService(
+    IOptions<BillingOptions> options,
+    IBillingEntitlementStore entitlements) : IPaymentAccessService
 {
     private readonly BillingOptions options = options.Value;
 
-    public Task<PaymentAccessDecision> AuthorizeAsync(
+    public async Task<PaymentAccessDecision> AuthorizeAsync(
         BillingFeature feature,
         string? userId,
         CancellationToken cancellationToken)
     {
         if (!options.RequireActiveSubscription)
         {
-            return Task.FromResult(PaymentAccessDecision.Allow());
+            return PaymentAccessDecision.Allow();
         }
 
         if (string.IsNullOrWhiteSpace(userId))
         {
-            return Task.FromResult(PaymentAccessDecision.Deny(
+            return PaymentAccessDecision.Deny(
                 BillingFailure.MissingUser,
-                "Sign in before using paid BlobSeek features."));
+                "Sign in before using paid BlobSeek features.");
         }
 
-        return Task.FromResult(options.PaidUserIds.Contains(userId)
-            ? PaymentAccessDecision.Allow()
-            : PaymentAccessDecision.Deny(
-                BillingFailure.PaymentRequired,
-                $"An active subscription is required to use {feature}."));
+        if (options.PaidUserIds.Contains(userId) || await entitlements.HasActiveEntitlementAsync(userId, cancellationToken))
+        {
+            return PaymentAccessDecision.Allow();
+        }
+
+        return PaymentAccessDecision.Deny(
+            BillingFailure.PaymentRequired,
+            $"An active subscription is required to use {feature}.");
     }
 }
