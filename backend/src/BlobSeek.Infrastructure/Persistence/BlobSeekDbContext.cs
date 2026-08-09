@@ -1,4 +1,5 @@
 using BlobSeek.Domain;
+using BlobSeek.Infrastructure.Billing;
 using Microsoft.EntityFrameworkCore;
 
 namespace BlobSeek.Infrastructure.Persistence;
@@ -10,6 +11,12 @@ public sealed class BlobSeekDbContext(DbContextOptions<BlobSeekDbContext> option
     public DbSet<IndexingRun> IndexingRuns => Set<IndexingRun>();
 
     public DbSet<IndexerLease> IndexerLeases => Set<IndexerLease>();
+
+    public DbSet<BillingCheckoutSession> BillingCheckoutSessions => Set<BillingCheckoutSession>();
+
+    public DbSet<BillingEntitlement> BillingEntitlements => Set<BillingEntitlement>();
+
+    public DbSet<StripeWebhookEvent> StripeWebhookEvents => Set<StripeWebhookEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +45,41 @@ public sealed class BlobSeekDbContext(DbContextOptions<BlobSeekDbContext> option
             entity.HasKey(x => x.Scope);
             entity.Property(x => x.Scope).HasMaxLength(256);
             entity.Property(x => x.OwnerId).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<BillingCheckoutSession>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.Plan, x.IdempotencyKey }).IsUnique();
+            entity.HasIndex(x => x.ProviderIdempotencyKey).IsUnique();
+            entity.Property(x => x.UserId).HasMaxLength(128);
+            entity.Property(x => x.Plan).HasMaxLength(32);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(128);
+            entity.Property(x => x.PriceId).HasMaxLength(128);
+            entity.Property(x => x.ProviderIdempotencyKey).HasMaxLength(320);
+            entity.Property(x => x.ProviderSessionId).HasMaxLength(128);
+            entity.Property(x => x.CheckoutUrl).HasMaxLength(2048);
+            entity.Property(x => x.Status).HasMaxLength(32);
+            entity.Property(x => x.FailureMessage).HasMaxLength(1024);
+        });
+
+        modelBuilder.Entity<BillingEntitlement>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.UserId).IsUnique();
+            entity.HasIndex(x => x.StripeSubscriptionId).IsUnique();
+            entity.Property(x => x.UserId).HasMaxLength(128);
+            entity.Property(x => x.Plan).HasMaxLength(32);
+            entity.Property(x => x.Status).HasMaxLength(32);
+            entity.Property(x => x.StripeCustomerId).HasMaxLength(128);
+            entity.Property(x => x.StripeSubscriptionId).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<StripeWebhookEvent>(entity =>
+        {
+            entity.HasKey(x => x.EventId);
+            entity.Property(x => x.EventId).HasMaxLength(128);
+            entity.Property(x => x.Type).HasMaxLength(128);
         });
     }
 }

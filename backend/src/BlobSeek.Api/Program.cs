@@ -96,7 +96,8 @@ api.MapPost("/billing/checkout", async Task<Results<Ok<CheckoutSessionResponse>,
 {
     var result = await billing.CreateCheckoutSessionAsync(new CreateCheckoutSessionCommand(
         request.Plan,
-        GetUserId(user) ?? ""), cancellationToken);
+        GetUserId(user) ?? "",
+        request.IdempotencyKey), cancellationToken);
 
     if (result.Succeeded && result.Url is not null)
     {
@@ -217,6 +218,7 @@ static string? GetUserId(ClaimsPrincipal user) =>
 static ProblemHttpResult ToProblem(BillingFailure? failure, string? message) => failure switch
 {
     BillingFailure.MissingUser => TypedResults.Problem(message ?? "Sign in required.", statusCode: StatusCodes.Status401Unauthorized),
+    BillingFailure.MissingIdempotencyKey => TypedResults.Problem(message ?? "Idempotency key required.", statusCode: StatusCodes.Status400BadRequest),
     BillingFailure.PaymentRequired => TypedResults.Problem(message ?? "Payment is required.", statusCode: StatusCodes.Status402PaymentRequired),
     BillingFailure.MissingConfiguration => TypedResults.Problem(message ?? "Billing is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable),
     BillingFailure.ProviderFailure => TypedResults.Problem(message ?? "Payment provider failed.", statusCode: StatusCodes.Status502BadGateway),

@@ -3,6 +3,7 @@ namespace BlobSeek.Application.Billing;
 public enum BillingFailure
 {
     MissingUser,
+    MissingIdempotencyKey,
     PaymentRequired,
     MissingConfiguration,
     ProviderFailure
