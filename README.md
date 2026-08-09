@@ -19,17 +19,17 @@ This project is a from-scratch .NET 8 and React rebuild inspired by the original
 
 ## Tech Stack
 
-| Area | Technology |
-| --- | --- |
-| Backend | .NET 8, ASP.NET Core Minimal APIs, C# |
-| Search | Lucene.NET |
-| State | EF Core with SQLite |
-| Storage | Azure.Storage.Blobs, Azure.Identity |
-| Background work | ASP.NET Core `BackgroundService` |
-| Observability | Serilog, health checks, OpenAPI |
-| Frontend | React, TypeScript, Vite, TanStack Query, React Router |
-| Styling | Tailwind CSS, lucide-react icons |
-| Tests | xUnit, Vitest, React Testing Library, Playwright |
+| Area            | Technology                                            |
+| --------------- | ----------------------------------------------------- |
+| Backend         | .NET 8, ASP.NET Core Minimal APIs, C#                 |
+| Search          | Lucene.NET                                            |
+| State           | EF Core with SQLite                                   |
+| Storage         | Azure.Storage.Blobs, Azure.Identity                   |
+| Background work | ASP.NET Core `BackgroundService`                      |
+| Observability   | Serilog, health checks, OpenAPI                       |
+| Frontend        | React, TypeScript, Vite, TanStack Query, React Router |
+| Styling         | Tailwind CSS, lucide-react icons                      |
+| Tests           | xUnit, Vitest, React Testing Library, Playwright      |
 
 ## Architecture
 
@@ -139,16 +139,16 @@ BlobSeek uses the .NET options pattern, so configuration can come from JSON file
 
 Common settings:
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `BlobSeek__Storage__SasExpiryMinutes` | `60` | Download link lifetime |
-| `BlobSeek__Indexing__BatchSize` | `100` | Commit/save cadence |
-| `BlobSeek__Indexing__MaxConcurrency` | `4` | Concurrent blob processing |
-| `BlobSeek__Indexing__PollingIntervalSeconds` | `300` | Worker delay between sync passes |
-| `BlobSeek__Indexing__MaxBlobMegabytes` | `50` | Metadata-only threshold for large blobs |
-| `BlobSeek__Indexing__MaxTextCharacters` | `50000` | Extracted text cap per blob |
-| `BlobSeek__Indexing__DataDirectory` | `/data` | SQLite and operational data path |
-| `BlobSeek__Search__IndexDirectory` | `/data/lucene` | Lucene index path |
+| Setting                                      | Default        | Purpose                                 |
+| -------------------------------------------- | -------------- | --------------------------------------- |
+| `BlobSeek__Storage__SasExpiryMinutes`        | `60`           | Download link lifetime                  |
+| `BlobSeek__Indexing__BatchSize`              | `100`          | Commit/save cadence                     |
+| `BlobSeek__Indexing__MaxConcurrency`         | `4`            | Concurrent blob processing              |
+| `BlobSeek__Indexing__PollingIntervalSeconds` | `300`          | Worker delay between sync passes        |
+| `BlobSeek__Indexing__MaxBlobMegabytes`       | `50`           | Metadata-only threshold for large blobs |
+| `BlobSeek__Indexing__MaxTextCharacters`      | `50000`        | Extracted text cap per blob             |
+| `BlobSeek__Indexing__DataDirectory`          | `/data`        | SQLite and operational data path        |
+| `BlobSeek__Search__IndexDirectory`           | `/data/lucene` | Lucene index path                       |
 
 You may use `ServiceUri` instead of `ConnectionString` to authenticate with `DefaultAzureCredential`:
 
@@ -182,13 +182,13 @@ Files larger than `BlobSeek__Indexing__MaxBlobMegabytes` are indexed by metadata
 
 ## API
 
-| Method | Route | Description |
-| --- | --- | --- |
-| `GET` | `/api/search?q=invoice&container=uploads&ext=pdf&sort=last_modified:desc` | Search indexed blobs |
-| `GET` | `/api/stats` | Read indexing status and statistics |
-| `POST` | `/api/index/run` | Trigger an indexing pass |
-| `GET` | `/api/download?storageAccount=primary&container=uploads&path=2026/invoice.pdf` | Create a short-lived download link |
-| `GET` | `/health` | Health check endpoint |
+| Method | Route                                                                          | Description                         |
+| ------ | ------------------------------------------------------------------------------ | ----------------------------------- |
+| `GET`  | `/api/search?q=invoice&container=uploads&ext=pdf&sort=last_modified:desc`      | Search indexed blobs                |
+| `GET`  | `/api/stats`                                                                   | Read indexing status and statistics |
+| `POST` | `/api/index/run`                                                               | Trigger an indexing pass            |
+| `GET`  | `/api/download?storageAccount=primary&container=uploads&path=2026/invoice.pdf` | Create a short-lived download link  |
+| `GET`  | `/health`                                                                      | Health check endpoint               |
 
 Swagger UI is available in development.
 
