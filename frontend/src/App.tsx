@@ -1,3 +1,4 @@
+import { Show, SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -5,6 +6,7 @@ import {
   ArrowRight,
   BadgeDollarSign,
   CheckCircle2,
+  ChevronRight,
   Cloud,
   Database,
   Download,
@@ -21,17 +23,18 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { createDownloadLink, search, stats, type SearchHit } from "./api";
+import { createCheckoutSession, createDownloadLink, search, stats, type CheckoutPlan, type SearchHit } from "./api";
 import { useDebouncedValue } from "./useDebouncedValue";
 
 const limit = 20;
+const clerkEnabled = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.startsWith("pk_")) && !import.meta.env.VITEST;
 
 export function App() {
   if (!window.location.pathname.startsWith("/search")) {
     return <LandingPage />;
   }
 
-  return <SearchConsole />;
+  return <ProtectedSearchConsole />;
 }
 
 function LandingPage() {
@@ -61,10 +64,7 @@ function LandingPage() {
             <a className="hover:text-lagoon" href="#workflow">Workflow</a>
             <a className="hover:text-lagoon" href="#deploy">Deploy</a>
           </nav>
-          <a className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-lagoon" href="/search">
-            Open app
-            <ArrowRight size={16} />
-          </a>
+          <AuthActions />
         </div>
       </header>
 
@@ -83,10 +83,10 @@ function LandingPage() {
                 BlobSeek is a Dockerized, self-hosted alternative for teams that need fast private search across Azure Blob Storage without adopting a standing managed search platform.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <a className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-lagoon px-5 text-sm font-bold text-white shadow-sm hover:bg-teal-800" href="/search">
+                <SignUpCta className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-lagoon px-5 text-sm font-bold text-white shadow-sm hover:bg-teal-800">
                   Launch search console
                   <ArrowRight size={17} />
-                </a>
+                </SignUpCta>
                 <a className="inline-flex h-12 items-center justify-center rounded-md border border-slate-300 bg-white px-5 text-sm font-bold text-slate-800 shadow-sm hover:border-lagoon hover:text-lagoon" href="#compare">
                   Compare value
                 </a>
@@ -126,6 +126,23 @@ function LandingPage() {
           <ValueCard icon={<Gauge size={22} />} title="Fast after indexing" body="The API searches Lucene directly, so user queries never download or parse blobs at request time." />
           <ValueCard icon={<ShieldCheck size={22} />} title="Keep control" body="Run it inside your own network and keep Azure credentials server-side." />
           <ValueCard icon={<Lock size={22} />} title="Predictable ownership" body="Use the compute and Postgres stack you already operate instead of another always-on search service." />
+        </section>
+
+        <section id="pricing" className="border-y border-slate-200 bg-[#f7f7f2]">
+          <div className="mx-auto max-w-7xl px-4 py-14">
+            <div className="mb-7 max-w-3xl">
+              <p className="text-sm font-bold uppercase tracking-wide text-copper">Stripe billing</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-normal">Start self-serve, then grow into team search.</h2>
+              <p className="mt-3 text-sm leading-7 text-slate-600">
+                Stripe Checkout powers every plan, with automatic tax enabled server-side. Clerk handles account creation before the user reaches the private search console.
+              </p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <PricingCard plan="pro" name="Pro" price="$19" description="For founders and operators searching private blob archives." features={["1 user", "100k indexed files", "Azure Blob connector", "Email support"]} />
+              <PricingCard plan="team" name="Team" price="$79" description="For businesses turning storage into a shared searchable repo." features={["10 users", "1M indexed files", "Shared containers", "Audit-ready activity"]} featured />
+              <PricingCard plan="business" name="Business" price="$249" description="For servers, departments, and high-volume file estates." features={["50 users", "Server agents", "Priority indexing", "Onboarding call"]} />
+            </div>
+          </div>
         </section>
 
         <section id="compare" className="border-y border-slate-200 bg-white">
@@ -198,7 +215,27 @@ function LandingPage() {
   );
 }
 
-function SearchConsole() {
+function ProtectedSearchConsole() {
+  if (!clerkEnabled) return <SearchConsole />;
+
+  return (
+    <>
+      <Show when="signed-in">
+        <AuthenticatedSearchConsole />
+      </Show>
+      <Show when="signed-out">
+        <AuthWall />
+      </Show>
+    </>
+  );
+}
+
+function AuthenticatedSearchConsole() {
+  const { getToken } = useAuth();
+  return <SearchConsole getAuthToken={getToken} />;
+}
+
+function SearchConsole({ getAuthToken }: { getAuthToken?: () => Promise<string | null> }) {
   const [query, setQuery] = useState("");
   const [container, setContainer] = useState<string>();
   const [extension, setExtension] = useState<string>();
@@ -209,10 +246,10 @@ function SearchConsole() {
   const searchParams = { q: debouncedQuery, container, ext: extension, sort, offset, limit };
   const searchQuery = useQuery({
     queryKey: ["search", searchParams],
-    queryFn: () => search(searchParams),
+    queryFn: async () => search(searchParams, (await getAuthToken?.()) ?? undefined),
     placeholderData: (previous) => previous
   });
-  const statsQuery = useQuery({ queryKey: ["stats"], queryFn: stats, refetchInterval: 60_000 });
+  const statsQuery = useQuery({ queryKey: ["stats"], queryFn: async () => stats((await getAuthToken?.()) ?? undefined), refetchInterval: 60_000 });
 
   const result = searchQuery.data;
   const activeFilters = Boolean(container || extension);
@@ -336,7 +373,7 @@ function SearchConsole() {
           ) : null}
 
           <ol className="space-y-3">
-            {result?.hits.map((hit) => <ResultRow hit={hit} key={hit.documentId} />)}
+            {result?.hits.map((hit) => <ResultRow getAuthToken={getAuthToken} hit={hit} key={hit.documentId} />)}
           </ol>
 
           {canLoadMore ? (
@@ -350,6 +387,160 @@ function SearchConsole() {
           ) : null}
         </section>
       </main>
+    </div>
+  );
+}
+
+function AuthActions() {
+  const buttonClass = "inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold";
+
+  if (!clerkEnabled) {
+    return <a className={`${buttonClass} bg-slate-950 text-white hover:bg-lagoon`} href="/search">Open app <ArrowRight size={16} /></a>;
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Show when="signed-out">
+        <SignInButton mode="modal">
+          <button className={`${buttonClass} border border-slate-300 bg-white text-slate-800 hover:border-lagoon hover:text-lagoon`} type="button">Log in</button>
+        </SignInButton>
+        <SignUpButton mode="modal">
+          <button className={`${buttonClass} bg-slate-950 text-white hover:bg-lagoon`} type="button">Sign up <ArrowRight size={16} /></button>
+        </SignUpButton>
+      </Show>
+      <Show when="signed-in">
+        <a className={`${buttonClass} bg-slate-950 text-white hover:bg-lagoon`} href="/search">Dashboard</a>
+        <UserButton afterSignOutUrl="/" />
+      </Show>
+    </div>
+  );
+}
+
+function SignUpCta({ className, children }: { className: string; children: ReactNode }) {
+  if (!clerkEnabled) return <a className={className} href="/search">{children}</a>;
+
+  return (
+    <>
+      <Show when="signed-out">
+        <SignUpButton mode="modal">
+          <button className={className} type="button">{children}</button>
+        </SignUpButton>
+      </Show>
+      <Show when="signed-in">
+        <a className={className} href="/search">{children}</a>
+      </Show>
+    </>
+  );
+}
+
+function PricingCard({
+  plan,
+  name,
+  price,
+  description,
+  features,
+  featured = false
+}: {
+  plan: CheckoutPlan;
+  name: string;
+  price: string;
+  description: string;
+  features: string[];
+  featured?: boolean;
+}) {
+  return (
+    <article className={`rounded-md border p-5 shadow-sm ${featured ? "border-lagoon bg-white shadow-lagoon/10" : "border-slate-200 bg-white"}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-semibold text-slate-950">{name}</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+        </div>
+        {featured ? <span className="rounded-md bg-lagoon/10 px-2 py-1 text-xs font-bold text-lagoon">Best value</span> : null}
+      </div>
+      <div className="mt-6 flex items-end gap-1">
+        <span className="text-4xl font-semibold tracking-normal">{price}</span>
+        <span className="pb-1 text-sm text-slate-500">/mo</span>
+      </div>
+      <ul className="mt-5 space-y-2 text-sm text-slate-700">
+        {features.map((feature) => <li className="flex items-center gap-2" key={feature}><CheckCircle2 size={16} className="text-lagoon" />{feature}</li>)}
+      </ul>
+      <CheckoutCta plan={plan} />
+    </article>
+  );
+}
+
+function CheckoutCta({ plan }: { plan: CheckoutPlan }) {
+  if (!clerkEnabled) return <CheckoutButton plan={plan} />;
+
+  return (
+    <>
+      <Show when="signed-in">
+        <AuthenticatedCheckoutButton plan={plan} />
+      </Show>
+      <Show when="signed-out">
+        <SignUpButton mode="modal">
+          <button className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white hover:bg-lagoon" type="button">
+            Create account <ChevronRight size={16} />
+          </button>
+        </SignUpButton>
+      </Show>
+    </>
+  );
+}
+
+function AuthenticatedCheckoutButton({ plan }: { plan: CheckoutPlan }) {
+  const { getToken } = useAuth();
+  return <CheckoutButton getAuthToken={getToken} plan={plan} />;
+}
+
+function CheckoutButton({ plan, getAuthToken }: { plan: CheckoutPlan; getAuthToken?: () => Promise<string | null> }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function startCheckout() {
+    setLoading(true);
+    setError(undefined);
+    try {
+      window.location.href = await createCheckoutSession(plan, (await getAuthToken?.()) ?? undefined);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Checkout is not configured yet");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mt-6">
+      <button
+        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white hover:bg-lagoon disabled:bg-slate-400"
+        disabled={loading}
+        onClick={startCheckout}
+        type="button"
+      >
+        {loading ? "Opening Stripe" : "Start with Stripe"}
+        <ChevronRight size={16} />
+      </button>
+      {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+function AuthWall() {
+  return (
+    <div className="min-h-screen bg-[#f7f7f2] px-4 py-16 text-slate-950">
+      <div className="mx-auto max-w-xl rounded-md border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <FileSearch className="mx-auto text-lagoon" size={38} />
+        <h1 className="mt-4 text-3xl font-semibold tracking-normal">Sign in to search your business files.</h1>
+        <p className="mt-3 text-sm leading-7 text-slate-600">BlobSeek keeps the private search console behind Clerk so each business can control users, sessions, and organizations.</p>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <SignInButton mode="modal">
+            <button className="inline-flex h-11 items-center justify-center rounded-md border border-slate-300 bg-white px-5 text-sm font-bold text-slate-800 hover:border-lagoon hover:text-lagoon" type="button">Log in</button>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-lagoon px-5 text-sm font-bold text-white hover:bg-teal-800" type="button">Create account <ArrowRight size={16} /></button>
+          </SignUpButton>
+        </div>
+      </div>
     </div>
   );
 }
@@ -464,7 +655,7 @@ function FacetPanel({
   );
 }
 
-function ResultRow({ hit }: { hit: SearchHit }) {
+function ResultRow({ hit, getAuthToken }: { hit: SearchHit; getAuthToken?: () => Promise<string | null> }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -472,7 +663,7 @@ function ResultRow({ hit }: { hit: SearchHit }) {
     setLoading(true);
     setError(undefined);
     try {
-      window.open(await createDownloadLink(hit), "_blank", "noopener");
+      window.open(await createDownloadLink(hit, (await getAuthToken?.()) ?? undefined), "_blank", "noopener");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create link");
     } finally {

@@ -1,11 +1,16 @@
 using System.IO.Compression;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using BlobSeek.Application.Indexing;
 using BlobSeek.Application.Search;
 using BlobSeek.Infrastructure;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.IdentityModel.Tokens;
+using Stripe;
+using Stripe.Checkout;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,15 +39,43 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 builder.Services.AddHealthChecks();
+var clerkIssuer = builder.Configuration["Clerk:Issuer"];
+var authEnabled = !string.IsNullOrWhiteSpace(clerkIssuer);
+if (authEnabled)
+{
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
+    {
+        options.Authority = clerkIssuer;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateAudience = false,
+            ValidateIssuer = true,
+            ValidIssuer = clerkIssuer,
+            NameClaimType = ClaimTypes.NameIdentifier
+        };
+    });
+}
+builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddBlobSeekInfrastructure(builder.Configuration);
+
+var stripeSecretKey = builder.Configuration["Stripe:SecretKey"];
+if (!string.IsNullOrWhiteSpace(stripeSecretKey))
+{
+    StripeConfiguration.ApiKey = stripeSecretKey;
+}
 
 var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseResponseCompression();
 app.UseRateLimiter();
+if (authEnabled)
+{
+    app.UseAuthentication();
+}
+app.UseAuthorization();
 app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment())
@@ -52,6 +85,74 @@ if (app.Environment.IsDevelopment())
 }
 
 var api = app.MapGroup("/api").RequireRateLimiting("api");
+if (authEnabled)
+{
+    api.RequireAuthorization();
+}
+
+
+api.MapPost("/billing/checkout", async Task<Results<Ok<CheckoutSessionResponse>, ProblemHttpResult>> (
+    CheckoutRequest request,
+    IConfiguration configuration,
+    ClaimsPrincipal user,
+    CancellationToken cancellationToken) =>
+{
+    var plan = request.Plan.Trim().ToLowerInvariant();
+    if (plan is not ("pro" or "team" or "business"))
+    {
+        return TypedResults.Problem("Unsupported billing plan.", statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    var secretKey = configuration["Stripe:SecretKey"];
+    var priceId = configuration[$"Stripe:Prices:{plan}"];
+    if (string.IsNullOrWhiteSpace(secretKey) || string.IsNullOrWhiteSpace(priceId))
+    {
+        return TypedResults.Problem("Stripe is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    var clerkUserId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub") ?? "anonymous";
+    var successUrl = configuration["Stripe:SuccessUrl"] ?? "http://localhost:8000/search?checkout=success&session_id={CHECKOUT_SESSION_ID}";
+    var cancelUrl = configuration["Stripe:CancelUrl"] ?? "http://localhost:8000/?checkout=cancelled";
+
+    var service = new SessionService();
+    var session = await service.CreateAsync(new SessionCreateOptions
+    {
+        Mode = "subscription",
+        SuccessUrl = successUrl,
+        CancelUrl = cancelUrl,
+        ClientReferenceId = clerkUserId,
+        AllowPromotionCodes = true,
+        AutomaticTax = new SessionAutomaticTaxOptions { Enabled = true },
+        TaxIdCollection = new SessionTaxIdCollectionOptions { Enabled = true },
+        LineItems =
+        [
+            new SessionLineItemOptions
+            {
+                Price = priceId,
+                Quantity = 1
+            }
+        ],
+        Metadata = new Dictionary<string, string>
+        {
+            ["clerk_user_id"] = clerkUserId,
+            ["plan"] = plan
+        },
+        SubscriptionData = new SessionSubscriptionDataOptions
+        {
+            Metadata = new Dictionary<string, string>
+            {
+                ["clerk_user_id"] = clerkUserId,
+                ["plan"] = plan
+            }
+        }
+    }, cancellationToken: cancellationToken);
+
+    return string.IsNullOrWhiteSpace(session.Url)
+        ? TypedResults.Problem("Stripe did not return a checkout URL.", statusCode: StatusCodes.Status502BadGateway)
+        : TypedResults.Ok(new CheckoutSessionResponse(session.Url));
+})
+.WithName("CreateCheckoutSession")
+.WithOpenApi();
 
 api.MapGet("/search", async Task<Results<Ok<SearchResponse>, ProblemHttpResult>> (
     ISearchIndex searchIndex,
@@ -115,6 +216,10 @@ app.MapHealthChecks("/health");
 app.MapFallback(() => Results.Redirect("/swagger"));
 
 app.Run();
+
+public sealed record CheckoutRequest(string Plan);
+
+public sealed record CheckoutSessionResponse(string Url);
 
 public sealed record DownloadLinkResponse(Uri Url);
 
