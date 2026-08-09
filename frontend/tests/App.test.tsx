@@ -23,7 +23,23 @@ vi.stubGlobal("fetch", vi.fn((url: string) => {
 }));
 
 describe("App", () => {
+  it("renders the BlobSeek landing page", () => {
+    window.history.pushState({}, "", "/");
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByRole("heading", { name: /Search your blob storage like a product/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Launch search console/i })).toHaveAttribute("href", "/search");
+    expect(screen.getByLabelText("BlobSeek home")).toBeInTheDocument();
+  });
+
   it("renders the BlobSeek search console", async () => {
+    window.history.pushState({}, "", "/search");
+
     render(
       <QueryClientProvider client={new QueryClient()}>
         <App />

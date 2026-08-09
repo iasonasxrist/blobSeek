@@ -2,13 +2,13 @@
 
 BlobSeek is a self-hosted full-text search application for Azure Blob Storage. It crawls one or more blob containers, extracts text from supported files, maintains an incremental local index, and provides a fast React search interface for names, paths, metadata, and document contents.
 
-This project is a from-scratch .NET 8 and React rebuild inspired by the original product and UI reference: [haseeb-140/bloblens](https://github.com/haseeb-140/bloblens). It preserves the useful product behavior while replacing the original FastAPI/Meilisearch stack with ASP.NET Core, SQLite, and Lucene.NET.
+This project is a from-scratch .NET 8 and React rebuild inspired by the original product and UI reference: [haseeb-140/bloblens](https://github.com/haseeb-140/bloblens). It preserves the useful product behavior while replacing the original FastAPI/Meilisearch stack with ASP.NET Core, PostgreSQL, and Lucene.NET.
 
 ## Highlights
 
 - Index one or more Azure Blob Storage accounts and containers.
 - Avoid re-downloading unchanged blobs by comparing ETags.
-- Store indexing state, failures, leases, and run history in SQLite.
+- Store indexing state, failures, leases, and run history in PostgreSQL.
 - Search with an embedded Lucene.NET index; no external search service required.
 - Extract text from PDF, DOCX, and common text/code formats.
 - Keep search requests fast by querying only the existing index.
@@ -46,7 +46,7 @@ BlobSeek Worker
         v
 Lucene.NET Search Index
 
-SQLite
+PostgreSQL
   |
   | blob state, failures, leases, run history
   v
@@ -92,6 +92,7 @@ Edit `.env` and set your Azure Storage connection information:
 BlobSeek__Storage__Accounts__0__Name=primary
 BlobSeek__Storage__Accounts__0__ConnectionString=DefaultEndpointsProtocol=https;...
 BlobSeek__Storage__Accounts__0__Containers__0=documents
+ConnectionStrings__BlobSeek=Host=postgres;Port=5432;Database=blobseek;Username=blobseek;Password=blobseek
 ```
 
 Start the stack:
@@ -139,6 +140,7 @@ BlobSeek uses the .NET options pattern, so configuration can come from JSON file
 
 Common settings:
 
+<<<<<<< Updated upstream
 | Setting                                      | Default        | Purpose                                 |
 | -------------------------------------------- | -------------- | --------------------------------------- |
 | `BlobSeek__Storage__SasExpiryMinutes`        | `60`           | Download link lifetime                  |
@@ -149,6 +151,18 @@ Common settings:
 | `BlobSeek__Indexing__MaxTextCharacters`      | `50000`        | Extracted text cap per blob             |
 | `BlobSeek__Indexing__DataDirectory`          | `/data`        | SQLite and operational data path        |
 | `BlobSeek__Search__IndexDirectory`           | `/data/lucene` | Lucene index path                       |
+=======
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `BlobSeek__Storage__SasExpiryMinutes` | `60` | Download link lifetime |
+| `BlobSeek__Indexing__BatchSize` | `100` | Commit/save cadence |
+| `BlobSeek__Indexing__MaxConcurrency` | `4` | Concurrent blob processing |
+| `BlobSeek__Indexing__PollingIntervalSeconds` | `300` | Worker delay between sync passes |
+| `BlobSeek__Indexing__MaxBlobMegabytes` | `50` | Metadata-only threshold for large blobs |
+| `BlobSeek__Indexing__MaxTextCharacters` | `50000` | Extracted text cap per blob |
+| `BlobSeek__Indexing__DataDirectory` | `/data` | Lucene and operational file data path |
+| `BlobSeek__Search__IndexDirectory` | `/data/lucene` | Lucene index path |
+>>>>>>> Stashed changes
 
 You may use `ServiceUri` instead of `ConnectionString` to authenticate with `DefaultAzureCredential`:
 
@@ -220,7 +234,7 @@ npm run test:e2e
 
 - Keep BlobSeek behind your network boundary, VPN, or reverse proxy.
 - Do not commit `.env`; use environment variables or platform secrets in production.
-- Persist `/data` so SQLite state and the Lucene index survive restarts.
+- Persist the `blobseek_postgres` and `blobseek_data` Docker volumes so PostgreSQL state and the Lucene index survive restarts.
 - Run only one worker per indexing scope unless you introduce a stronger distributed lease.
 - The browser never receives storage credentials, only search results and short-lived download URLs.
 

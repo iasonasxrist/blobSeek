@@ -26,6 +26,10 @@ test("loads the search shell", async ({ page }) => {
   });
 
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Search your blob storage like a product/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Launch search console/i })).toBeVisible();
+
+  await page.goto("/search");
   await expect(page.getByRole("heading", { name: "BlobSeek" })).toBeVisible();
   await expect(page.getByRole("searchbox", { name: "Search blobs" })).toBeVisible();
 });

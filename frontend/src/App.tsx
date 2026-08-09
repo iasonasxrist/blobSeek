@@ -2,13 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowDownAZ,
+  ArrowRight,
+  BadgeDollarSign,
+  CheckCircle2,
+  Cloud,
   Database,
   Download,
   FileSearch,
   Folder,
+  Gauge,
   HardDrive,
+  Lock,
   RefreshCw,
   Search,
+  Server,
+  ShieldCheck,
   X
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -19,6 +27,178 @@ import { useDebouncedValue } from "./useDebouncedValue";
 const limit = 20;
 
 export function App() {
+  if (!window.location.pathname.startsWith("/search")) {
+    return <LandingPage />;
+  }
+
+  return <SearchConsole />;
+}
+
+function LandingPage() {
+  const comparisonRows = [
+    ["Full-text inside blobs", "PDF, DOCX, text, and code files", "Yes, with a managed search service"],
+    ["Indexing cost profile", "Runs on your Docker infrastructure", "Metered Azure Search service tiers"],
+    ["Data boundary", "Self-hosted API, PostgreSQL, Lucene volume", "Managed Azure service boundary"],
+    ["Incremental sync", "ETag-aware downloads only when blobs change", "Azure indexer pipeline"],
+    ["Best fit", "Private blob search with predictable ownership", "Enterprise search platform needs"]
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#f7f7f2] text-slate-950">
+      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+          <a className="flex items-center gap-2" href="/" aria-label="BlobSeek home">
+            <span className="grid h-10 w-10 place-items-center rounded-md bg-lagoon text-white">
+              <FileSearch size={21} />
+            </span>
+            <span>
+              <span className="block text-lg font-semibold leading-none">BlobSeek</span>
+              <span className="block text-xs text-slate-500">Self-hosted Azure Blob search</span>
+            </span>
+          </a>
+          <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex" aria-label="Primary">
+            <a className="hover:text-lagoon" href="#compare">Compare</a>
+            <a className="hover:text-lagoon" href="#workflow">Workflow</a>
+            <a className="hover:text-lagoon" href="#deploy">Deploy</a>
+          </nav>
+          <a className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-lagoon" href="/search">
+            Open app
+            <ArrowRight size={16} />
+          </a>
+        </div>
+      </header>
+
+      <main>
+        <section className="overflow-hidden border-b border-slate-200 bg-white">
+          <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:py-20">
+            <div className="max-w-3xl">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-lagoon/20 bg-lagoon/10 px-3 py-2 text-sm font-semibold text-lagoon">
+                <BadgeDollarSign size={16} />
+                Reduce Azure AI Search spend for internal blob discovery
+              </div>
+              <h1 className="text-4xl font-semibold leading-tight tracking-normal text-slate-950 md:text-6xl">
+                Search your blob storage like a product, not a billing surprise.
+              </h1>
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
+                BlobSeek is a Dockerized, self-hosted alternative for teams that need fast private search across Azure Blob Storage without adopting a standing managed search platform.
+              </p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <a className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-lagoon px-5 text-sm font-bold text-white shadow-sm hover:bg-teal-800" href="/search">
+                  Launch search console
+                  <ArrowRight size={17} />
+                </a>
+                <a className="inline-flex h-12 items-center justify-center rounded-md border border-slate-300 bg-white px-5 text-sm font-bold text-slate-800 shadow-sm hover:border-lagoon hover:text-lagoon" href="#compare">
+                  Compare value
+                </a>
+              </div>
+              <dl className="mt-9 grid max-w-2xl grid-cols-3 gap-3">
+                <Metric value="0" label="external search servers required" />
+                <Metric value="ETag" label="change-aware indexing" />
+                <Metric value="Docker" label="local or production deploy" />
+              </dl>
+            </div>
+
+            <div className="rounded-md border border-slate-200 bg-slate-950 p-4 shadow-2xl shadow-slate-300/50">
+              <div className="rounded-md border border-white/10 bg-[#0e1726] p-4 text-white">
+                <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Search size={18} className="text-teal-300" />
+                    <span className="font-mono text-sm text-slate-200">invoice vendor terms</span>
+                  </div>
+                  <span className="font-mono text-xs text-teal-300">18 ms</span>
+                </div>
+                <div className="space-y-3">
+                  <MockResult name="finance/2026/vendor-invoice-0421.pdf" type="pdf" meta="invoices · 248 KB · indexed" />
+                  <MockResult name="legal/contracts/master-service-agreement.docx" type="docx" meta="contracts · 91 KB · indexed" />
+                  <MockResult name="exports/customer-ledger-jan.csv" type="csv" meta="reports · 2.4 MB · text indexed" />
+                </div>
+                <div className="mt-5 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-3">
+                  <MiniSignal icon={<Cloud size={16} />} label="Azure Blob" />
+                  <MiniSignal icon={<Database size={16} />} label="PostgreSQL" />
+                  <MiniSignal icon={<Server size={16} />} label="Lucene.NET" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto grid max-w-7xl gap-4 px-4 py-12 md:grid-cols-3">
+          <ValueCard icon={<Gauge size={22} />} title="Fast after indexing" body="The API searches Lucene directly, so user queries never download or parse blobs at request time." />
+          <ValueCard icon={<ShieldCheck size={22} />} title="Keep control" body="Run it inside your own network and keep Azure credentials server-side." />
+          <ValueCard icon={<Lock size={22} />} title="Predictable ownership" body="Use the compute and Postgres stack you already operate instead of another always-on search service." />
+        </section>
+
+        <section id="compare" className="border-y border-slate-200 bg-white">
+          <div className="mx-auto max-w-7xl px-4 py-14">
+            <div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-wide text-lagoon">Value comparison</p>
+                <h2 className="mt-2 text-3xl font-semibold tracking-normal">Built for blob search, not a platform migration.</h2>
+              </div>
+              <p className="max-w-xl text-sm leading-6 text-slate-600">
+                Azure AI Search is excellent when you need a managed enterprise search platform. BlobSeek is focused on private Azure Blob full-text search with lower operational surface area.
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-md border border-slate-200">
+              <table className="w-full border-collapse bg-white text-left text-sm">
+                <thead className="bg-slate-950 text-white">
+                  <tr>
+                    <th className="p-4 font-semibold">Capability</th>
+                    <th className="p-4 font-semibold">BlobSeek</th>
+                    <th className="p-4 font-semibold">Azure AI Search</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonRows.map(([label, blobSeek, azure]) => (
+                    <tr className="border-t border-slate-200" key={label}>
+                      <td className="p-4 font-semibold text-slate-800">{label}</td>
+                      <td className="p-4 text-slate-700"><CheckLine>{blobSeek}</CheckLine></td>
+                      <td className="p-4 text-slate-600">{azure}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="workflow" className="mx-auto grid max-w-7xl gap-8 px-4 py-14 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-copper">Indexing model</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-normal">Cheap repeat crawls because unchanged blobs stay untouched.</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-600">
+              BlobSeek stores state in PostgreSQL and treats ETag as the primary change signal. The worker streams blob listings, downloads only what changed, and isolates failures.
+            </p>
+          </div>
+          <ol className="grid gap-3 sm:grid-cols-2">
+            {["List configured containers", "Compare blob ETags", "Download changed files", "Extract text into Lucene"].map((item, index) => (
+              <li className="rounded-md border border-slate-200 bg-white p-5 shadow-sm" key={item}>
+                <span className="font-mono text-sm font-semibold text-lagoon">0{index + 1}</span>
+                <p className="mt-3 text-base font-semibold text-slate-900">{item}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section id="deploy" className="border-t border-slate-200 bg-slate-950 text-white">
+          <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <h2 className="text-3xl font-semibold tracking-normal">Run BlobSeek with one Docker command.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+                Compose starts the API, worker, React frontend, PostgreSQL, and persistent Lucene storage. Bring your Azure Storage connection string and index.
+              </p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/5 p-4 font-mono text-sm text-teal-200">
+              docker compose up --build
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function SearchConsole() {
   const [query, setQuery] = useState("");
   const [container, setContainer] = useState<string>();
   const [extension, setExtension] = useState<string>();
@@ -171,6 +351,55 @@ export function App() {
         </section>
       </main>
     </div>
+  );
+}
+
+function Metric({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <dt className="font-mono text-lg font-semibold text-slate-950">{value}</dt>
+      <dd className="mt-1 text-xs leading-5 text-slate-500">{label}</dd>
+    </div>
+  );
+}
+
+function MockResult({ name, type, meta }: { name: string; type: string; meta: string }) {
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.04] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="break-all font-mono text-sm text-slate-100">{name}</span>
+        <span className="rounded bg-teal-300/10 px-2 py-1 font-mono text-xs text-teal-200">.{type}</span>
+      </div>
+      <p className="mt-2 text-xs text-slate-400">{meta}</p>
+    </div>
+  );
+}
+
+function MiniSignal({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-white/[0.04] px-3 py-2 text-xs text-slate-300">
+      <span className="text-teal-300">{icon}</span>
+      {label}
+    </div>
+  );
+}
+
+function ValueCard({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
+  return (
+    <article className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 grid h-11 w-11 place-items-center rounded-md bg-copper/10 text-copper">{icon}</div>
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
+    </article>
+  );
+}
+
+function CheckLine({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <CheckCircle2 size={16} className="shrink-0 text-lagoon" />
+      <span>{children}</span>
+    </span>
   );
 }
 
