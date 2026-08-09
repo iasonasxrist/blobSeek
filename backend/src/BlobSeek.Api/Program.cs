@@ -1,6 +1,9 @@
 using System.IO.Compression;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using BlobSeek.Application.Billing;
 using BlobSeek.Application.Indexing;
 using BlobSeek.Application.Search;
 using BlobSeek.Infrastructure;
@@ -9,8 +12,6 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
-using Stripe;
-using Stripe.Checkout;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +20,8 @@ builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration).WriteTo.Console());
 
 builder.Services.AddProblemDetails();
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false)));
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -60,12 +63,6 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddBlobSeekInfrastructure(builder.Configuration);
 
-var stripeSecretKey = builder.Configuration["Stripe:SecretKey"];
-if (!string.IsNullOrWhiteSpace(stripeSecretKey))
-{
-    StripeConfiguration.ApiKey = stripeSecretKey;
-}
-
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -93,69 +90,28 @@ if (authEnabled)
 
 api.MapPost("/billing/checkout", async Task<Results<Ok<CheckoutSessionResponse>, ProblemHttpResult>> (
     CheckoutRequest request,
-    IConfiguration configuration,
+    IBillingCheckoutService billing,
     ClaimsPrincipal user,
     CancellationToken cancellationToken) =>
 {
-    var plan = request.Plan.Trim().ToLowerInvariant();
-    if (plan is not ("pro" or "team" or "business"))
+    var result = await billing.CreateCheckoutSessionAsync(new CreateCheckoutSessionCommand(
+        request.Plan,
+        GetUserId(user) ?? ""), cancellationToken);
+
+    if (result.Succeeded && result.Url is not null)
     {
-        return TypedResults.Problem("Unsupported billing plan.", statusCode: StatusCodes.Status400BadRequest);
+        return TypedResults.Ok(new CheckoutSessionResponse(result.Url));
     }
 
-    var secretKey = configuration["Stripe:SecretKey"];
-    var priceId = configuration[$"Stripe:Prices:{plan}"];
-    if (string.IsNullOrWhiteSpace(secretKey) || string.IsNullOrWhiteSpace(priceId))
-    {
-        return TypedResults.Problem("Stripe is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-
-    var clerkUserId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub") ?? "anonymous";
-    var successUrl = configuration["Stripe:SuccessUrl"] ?? "http://localhost:8000/search?checkout=success&session_id={CHECKOUT_SESSION_ID}";
-    var cancelUrl = configuration["Stripe:CancelUrl"] ?? "http://localhost:8000/?checkout=cancelled";
-
-    var service = new SessionService();
-    var session = await service.CreateAsync(new SessionCreateOptions
-    {
-        Mode = "subscription",
-        SuccessUrl = successUrl,
-        CancelUrl = cancelUrl,
-        ClientReferenceId = clerkUserId,
-        AllowPromotionCodes = true,
-        AutomaticTax = new SessionAutomaticTaxOptions { Enabled = true },
-        TaxIdCollection = new SessionTaxIdCollectionOptions { Enabled = true },
-        LineItems =
-        [
-            new SessionLineItemOptions
-            {
-                Price = priceId,
-                Quantity = 1
-            }
-        ],
-        Metadata = new Dictionary<string, string>
-        {
-            ["clerk_user_id"] = clerkUserId,
-            ["plan"] = plan
-        },
-        SubscriptionData = new SessionSubscriptionDataOptions
-        {
-            Metadata = new Dictionary<string, string>
-            {
-                ["clerk_user_id"] = clerkUserId,
-                ["plan"] = plan
-            }
-        }
-    }, cancellationToken: cancellationToken);
-
-    return string.IsNullOrWhiteSpace(session.Url)
-        ? TypedResults.Problem("Stripe did not return a checkout URL.", statusCode: StatusCodes.Status502BadGateway)
-        : TypedResults.Ok(new CheckoutSessionResponse(session.Url));
+    return ToProblem(result.Failure, result.Message);
 })
 .WithName("CreateCheckoutSession")
 .WithOpenApi();
 
 api.MapGet("/search", async Task<Results<Ok<SearchResponse>, ProblemHttpResult>> (
     ISearchIndex searchIndex,
+    IPaymentAccessService paymentAccess,
+    ClaimsPrincipal user,
     string? q,
     string? container,
     string? ext,
@@ -164,6 +120,12 @@ api.MapGet("/search", async Task<Results<Ok<SearchResponse>, ProblemHttpResult>>
     int? offset,
     CancellationToken cancellationToken) =>
 {
+    var access = await paymentAccess.AuthorizeAsync(BillingFeature.Search, GetUserId(user), cancellationToken);
+    if (!access.Allowed)
+    {
+        return ToProblem(access.Failure, access.Message);
+    }
+
     if (sort is not null && sort is not ("last_modified:desc" or "last_modified:asc" or "size:desc" or "size:asc"))
     {
         return TypedResults.Problem("Unsupported sort expression.", statusCode: StatusCodes.Status400BadRequest);
@@ -182,23 +144,55 @@ api.MapGet("/search", async Task<Results<Ok<SearchResponse>, ProblemHttpResult>>
 .WithName("Search")
 .WithOpenApi();
 
-api.MapGet("/stats", async (IIndexingStatsReader stats, CancellationToken cancellationToken) =>
-    TypedResults.Ok(await stats.GetStatsAsync(cancellationToken)))
-    .WithName("Stats")
-    .WithOpenApi();
+api.MapGet("/stats", async Task<Results<Ok<object>, ProblemHttpResult>> (
+    IIndexingStatsReader stats,
+    IPaymentAccessService paymentAccess,
+    ClaimsPrincipal user,
+    CancellationToken cancellationToken) =>
+{
+    var access = await paymentAccess.AuthorizeAsync(BillingFeature.Search, GetUserId(user), cancellationToken);
+    if (!access.Allowed)
+    {
+        return ToProblem(access.Failure, access.Message);
+    }
 
-api.MapPost("/index/run", async (IIndexingCoordinator coordinator, CancellationToken cancellationToken) =>
-    TypedResults.Accepted($"/api/stats", await coordinator.RunOnceAsync(cancellationToken)))
-    .WithName("RunIndexing")
-    .WithOpenApi();
+    return TypedResults.Ok<object>(await stats.GetStatsAsync(cancellationToken));
+})
+.WithName("Stats")
+.WithOpenApi();
+
+api.MapPost("/index/run", async Task<Results<Accepted<object>, ProblemHttpResult>> (
+    IIndexingCoordinator coordinator,
+    IPaymentAccessService paymentAccess,
+    ClaimsPrincipal user,
+    CancellationToken cancellationToken) =>
+{
+    var access = await paymentAccess.AuthorizeAsync(BillingFeature.ManualIndexing, GetUserId(user), cancellationToken);
+    if (!access.Allowed)
+    {
+        return ToProblem(access.Failure, access.Message);
+    }
+
+    return TypedResults.Accepted<object>($"/api/stats", await coordinator.RunOnceAsync(cancellationToken));
+})
+.WithName("RunIndexing")
+.WithOpenApi();
 
 api.MapGet("/download", async Task<Results<Ok<DownloadLinkResponse>, ProblemHttpResult>> (
     IBlobCatalog blobs,
+    IPaymentAccessService paymentAccess,
+    ClaimsPrincipal user,
     string storageAccount,
     string container,
     string path,
     CancellationToken cancellationToken) =>
 {
+    var access = await paymentAccess.AuthorizeAsync(BillingFeature.Download, GetUserId(user), cancellationToken);
+    if (!access.Allowed)
+    {
+        return ToProblem(access.Failure, access.Message);
+    }
+
     try
     {
         var uri = await blobs.CreateDownloadLinkAsync(storageAccount, container, path, cancellationToken);
@@ -217,9 +211,17 @@ app.MapFallback(() => Results.Redirect("/swagger"));
 
 app.Run();
 
-public sealed record CheckoutRequest(string Plan);
+static string? GetUserId(ClaimsPrincipal user) =>
+    user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
 
-public sealed record CheckoutSessionResponse(string Url);
+static ProblemHttpResult ToProblem(BillingFailure? failure, string? message) => failure switch
+{
+    BillingFailure.MissingUser => TypedResults.Problem(message ?? "Sign in required.", statusCode: StatusCodes.Status401Unauthorized),
+    BillingFailure.PaymentRequired => TypedResults.Problem(message ?? "Payment is required.", statusCode: StatusCodes.Status402PaymentRequired),
+    BillingFailure.MissingConfiguration => TypedResults.Problem(message ?? "Billing is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable),
+    BillingFailure.ProviderFailure => TypedResults.Problem(message ?? "Payment provider failed.", statusCode: StatusCodes.Status502BadGateway),
+    _ => TypedResults.Problem(message ?? "Billing failed.", statusCode: StatusCodes.Status400BadRequest)
+};
 
 public sealed record DownloadLinkResponse(Uri Url);
 

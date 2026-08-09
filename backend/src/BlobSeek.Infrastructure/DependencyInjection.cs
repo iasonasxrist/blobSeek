@@ -1,7 +1,9 @@
+using BlobSeek.Application.Billing;
 using BlobSeek.Application.Indexing;
 using BlobSeek.Application.Options;
 using BlobSeek.Application.Search;
 using BlobSeek.Infrastructure.Azure;
+using BlobSeek.Infrastructure.Billing;
 using BlobSeek.Infrastructure.Extraction;
 using BlobSeek.Infrastructure.Indexing;
 using BlobSeek.Infrastructure.Persistence;
@@ -23,6 +25,11 @@ public static class DependencyInjection
             .Validate(options => options.Storage.Accounts.Count > 0, "At least one storage account is required.")
             .ValidateOnStart();
 
+        services.AddOptions<BillingOptions>()
+            .Bind(configuration.GetSection(BillingOptions.SectionName));
+        services.AddOptions<StripeOptions>()
+            .Bind(configuration.GetSection(StripeOptions.SectionName));
+
         var options = configuration.GetSection(BlobSeekOptions.SectionName).Get<BlobSeekOptions>() ?? new BlobSeekOptions();
         var dataDirectory = options.Indexing.DataDirectory;
         Directory.CreateDirectory(dataDirectory);
@@ -38,6 +45,9 @@ public static class DependencyInjection
         services.AddSingleton<ISearchIndex, LuceneSearchIndex>();
         services.AddScoped<IIndexingCoordinator, IndexingCoordinator>();
         services.AddScoped<IIndexingStatsReader, IndexingStatsReader>();
+        services.AddScoped<IBillingCheckoutService, BillingCheckoutService>();
+        services.AddScoped<IPaymentAccessService, ConfiguredPaymentAccessService>();
+        services.AddScoped<IPaymentGateway, StripePaymentGateway>();
         services.AddHostedService<DatabaseInitializer>();
 
         return services;

@@ -17,9 +17,9 @@ const queryClient = new QueryClient({
 });
 
 const router = createBrowserRouter([{ path: "*", element: <App /> }]);
-const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as
-  | string
-  | undefined;
+const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.startsWith("pk_") && !import.meta.env.VITEST
+  ? import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+  : undefined;
 
 const app = (
   <QueryClientProvider client={queryClient}>
