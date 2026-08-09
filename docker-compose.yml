@@ -1,26 +1,51 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: blobseek
+      POSTGRES_USER: blobseek
+      POSTGRES_PASSWORD: blobseek
+    volumes:
+      - blobseek_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blobseek -d blobseek"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
       dockerfile: backend/Dockerfile
       args:
         TARGET_PROJECT: BlobSeek.Api
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__BlobSeek: Host=postgres;Port=5432;Database=blobseek;Username=blobseek;Password=blobseek
     volumes:
       - blobseek_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   worker:
     build:
       context: .
       dockerfile: backend/Worker.Dockerfile
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
       DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__BlobSeek: Host=postgres;Port=5432;Database=blobseek;Username=blobseek;Password=blobseek
     volumes:
       - blobseek_data:/data
     depends_on:
+      postgres:
+        condition: service_healthy
       api:
         condition: service_started
 
@@ -36,3 +61,4 @@ services:
 
 volumes:
   blobseek_data:
+  blobseek_postgres:

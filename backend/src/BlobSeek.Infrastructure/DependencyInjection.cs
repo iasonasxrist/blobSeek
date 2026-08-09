@@ -27,9 +27,11 @@ public static class DependencyInjection
         var dataDirectory = options.Indexing.DataDirectory;
         Directory.CreateDirectory(dataDirectory);
 
-        var connectionString = $"Data Source={Path.Combine(dataDirectory, "blobseek.db")}";
-        services.AddDbContext<BlobSeekDbContext>(db => db.UseSqlite(connectionString));
-        services.AddDbContextFactory<BlobSeekDbContext>(db => db.UseSqlite(connectionString));
+        var connectionString = configuration.GetConnectionString("BlobSeek")
+            ?? "Host=postgres;Port=5432;Database=blobseek;Username=blobseek;Password=blobseek";
+
+        services.AddDbContextFactory<BlobSeekDbContext>(db => db.UseNpgsql(connectionString));
+        services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<BlobSeekDbContext>>().CreateDbContext());
 
         services.AddSingleton<IBlobCatalog, AzureBlobCatalog>();
         services.AddSingleton<ITextExtractor, CompositeTextExtractor>();
