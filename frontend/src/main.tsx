@@ -23,6 +23,7 @@ const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement)
 async function render() {
   const config = import.meta.env.VITEST ? { clerkPublishableKey: null } : await getPublicConfig();
   const clerkPublishableKey = config.clerkPublishableKey?.startsWith("pk_") ? config.clerkPublishableKey : undefined;
+  window.__BLOBSEEK_CLERK_ENABLED__ = Boolean(clerkPublishableKey);
 
   const app = (
     <QueryClientProvider client={queryClient}>

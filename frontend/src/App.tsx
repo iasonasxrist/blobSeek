@@ -27,7 +27,16 @@ import { createCheckoutSession, createDownloadLink, search, stats, type Checkout
 import { useDebouncedValue } from "./useDebouncedValue";
 
 const limit = 20;
-const clerkEnabled = "Clerk" in window && !import.meta.env.VITEST;
+
+declare global {
+  interface Window {
+    __BLOBSEEK_CLERK_ENABLED__?: boolean;
+  }
+}
+
+function isClerkEnabled() {
+  return Boolean(window.__BLOBSEEK_CLERK_ENABLED__) && !import.meta.env.VITEST;
+}
 
 export function App() {
   if (!window.location.pathname.startsWith("/search")) {
@@ -216,7 +225,7 @@ function LandingPage() {
 }
 
 function ProtectedSearchConsole() {
-  if (!clerkEnabled) return <SearchConsole />;
+  if (!isClerkEnabled()) return <SearchConsole />;
 
   return (
     <>
@@ -398,7 +407,7 @@ function createIdempotencyKey() {
 function AuthActions() {
   const buttonClass = "inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold";
 
-  if (!clerkEnabled) {
+  if (!isClerkEnabled()) {
     return <a className={`${buttonClass} bg-slate-950 text-white hover:bg-lagoon`} href="/search">Open app <ArrowRight size={16} /></a>;
   }
 
@@ -421,7 +430,7 @@ function AuthActions() {
 }
 
 function SignUpCta({ className, children }: { className: string; children: ReactNode }) {
-  if (!clerkEnabled) return <a className={className} href="/search">{children}</a>;
+  if (!isClerkEnabled()) return <a className={className} href="/search">{children}</a>;
 
   return (
     <>
@@ -474,7 +483,7 @@ function PricingCard({
 }
 
 function CheckoutCta({ plan }: { plan: CheckoutPlan }) {
-  if (!clerkEnabled) return <CheckoutButton plan={plan} />;
+  if (!isClerkEnabled()) return <CheckoutButton plan={plan} />;
 
   return (
     <>

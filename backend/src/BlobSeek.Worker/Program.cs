@@ -1,10 +1,12 @@
 using BlobSeek.Application.Indexing;
 using BlobSeek.Application.Options;
 using BlobSeek.Infrastructure;
+using BlobSeek.Infrastructure.Configuration;
 using Microsoft.Extensions.Options;
 using Serilog;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Configuration.AddInfisicalWhenConfigured(builder.Environment);
 
 builder.Services.AddSerilog((services, configuration) =>
     configuration.ReadFrom.Configuration(builder.Configuration).WriteTo.Console());

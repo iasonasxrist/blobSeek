@@ -85,7 +85,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapGet("/api/public-config", (IConfiguration configuration) =>
 {
-    var clerkPublishableKey = configuration["Clerk:PublishableKey"] ?? configuration["VITE_CLERK_PUBLISHABLE_KEY"];
+    var clerkPublishableKey = configuration["Clerk:PublishableKey"];
 
     return TypedResults.Ok(new PublicConfigResponse(
         clerkPublishableKey?.StartsWith("pk_", StringComparison.Ordinal) == true ? clerkPublishableKey : null));
