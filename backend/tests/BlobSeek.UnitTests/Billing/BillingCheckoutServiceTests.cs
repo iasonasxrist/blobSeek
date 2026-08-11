@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using BlobSeek.Application.Billing;
 using BlobSeek.Infrastructure.Billing;
 using Microsoft.Extensions.Options;
@@ -309,22 +308,34 @@ public sealed class BillingCheckoutServiceTests
             session.CheckoutUrl,
             session.ProviderSessionId);
 
-        private sealed record MutableSession(
-            Guid Id,
-            string UserId,
-            BillingPlan Plan,
-            string IdempotencyKey,
-            string PriceId,
-            string ProviderIdempotencyKey,
-            string Status,
-            string? CheckoutUrl,
-            string? ProviderSessionId)
+        private sealed class MutableSession(
+            Guid id,
+            string userId,
+            BillingPlan plan,
+            string idempotencyKey,
+            string priceId,
+            string providerIdempotencyKey,
+            string status,
+            string? checkoutUrl,
+            string? providerSessionId)
         {
-            public string Status { get; set; } = Status;
+            public Guid Id { get; } = id;
 
-            public string? CheckoutUrl { get; set; } = CheckoutUrl;
+            public string UserId { get; } = userId;
 
-            public string? ProviderSessionId { get; set; } = ProviderSessionId;
+            public BillingPlan Plan { get; } = plan;
+
+            public string IdempotencyKey { get; } = idempotencyKey;
+
+            public string PriceId { get; } = priceId;
+
+            public string ProviderIdempotencyKey { get; } = providerIdempotencyKey;
+
+            public string Status { get; set; } = status;
+
+            public string? CheckoutUrl { get; set; } = checkoutUrl;
+
+            public string? ProviderSessionId { get; set; } = providerSessionId;
         }
     }
 }

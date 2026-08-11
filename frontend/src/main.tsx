@@ -4,6 +4,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { App } from "./App";
+import { getPublicConfig } from "./api";
 import "./styles.css";
 
 const queryClient = new QueryClient({
@@ -17,24 +18,29 @@ const queryClient = new QueryClient({
 });
 
 const router = createBrowserRouter([{ path: "*", element: <App /> }]);
-const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.startsWith("pk_") && !import.meta.env.VITEST
-  ? import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
-  : undefined;
+const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
-const app = (
-  <QueryClientProvider client={queryClient}>
-    <RouterProvider router={router} />
-  </QueryClientProvider>
-);
+async function render() {
+  const config = import.meta.env.VITEST ? { clerkPublishableKey: null } : await getPublicConfig();
+  const clerkPublishableKey = config.clerkPublishableKey?.startsWith("pk_") ? config.clerkPublishableKey : undefined;
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    {clerkPublishableKey ? (
-      <ClerkProvider publishableKey={clerkPublishableKey}>
-        {app}
-      </ClerkProvider>
-    ) : (
-      app
-    )}
-  </React.StrictMode>,
-);
+  const app = (
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  );
+
+  root.render(
+    <React.StrictMode>
+      {clerkPublishableKey ? (
+        <ClerkProvider publishableKey={clerkPublishableKey}>
+          {app}
+        </ClerkProvider>
+      ) : (
+        app
+      )}
+    </React.StrictMode>,
+  );
+}
+
+void render();

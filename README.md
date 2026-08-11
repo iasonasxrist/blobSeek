@@ -151,8 +151,15 @@ Common settings:
 | `BlobSeek__Indexing__MaxTextCharacters` | `50000` | Extracted text cap per blob |
 | `BlobSeek__Indexing__DataDirectory` | `/data` | Lucene and operational file data path |
 | `BlobSeek__Search__IndexDirectory` | `/data/lucene` | Lucene index path |
-| `VITE_CLERK_PUBLISHABLE_KEY` | empty | Enables Clerk sign-up/login in the React app |
+| `Clerk__PublishableKey` | empty | Public Clerk browser key returned by `/api/public-config` |
 | `Clerk__Issuer` | empty | Enables backend Clerk JWT validation when set |
+| `Infisical__Enabled` | `false` | Load backend configuration directly from Infisical at API/worker startup |
+| `Infisical__ApiUrl` | `https://us.infisical.com` | Infisical API base URL |
+| `Infisical__ProjectId` | empty | Infisical project id |
+| `Infisical__Environment` | dev/prod by ASP.NET environment | Infisical environment slug; defaults to `dev` only in Development |
+| `Infisical__SecretPath` | `/blobseek` | Infisical secret path |
+| `Infisical__ClientId` | empty | Universal Auth client id for backend secret loading |
+| `Infisical__ClientSecret` | empty | Universal Auth client secret for backend secret loading |
 | `Stripe__SecretKey` | empty | Stripe secret key used by the API to create checkout sessions |
 | `Stripe__Prices__pro` | empty | Stripe recurring price ID for the Pro plan |
 | `Stripe__Prices__team` | empty | Stripe recurring price ID for the Team plan |
@@ -171,15 +178,57 @@ BlobSeek__Storage__Accounts__0__ServiceUri=https://myaccount.blob.core.windows.n
 SAS download links require credentials that can sign SAS URLs. Managed identity is suitable for indexing, but may need a separate download strategy if the credential cannot generate SAS links.
 
 
+
+## Managed Secrets With Infisical
+
+BlobSeek can receive secrets either through `infisical run` environment injection or through the backend startup Infisical provider. Keep Clerk, Stripe, database, storage, and paid-access values out of checked-in `appsettings*.json`. The frontend does not call Infisical and does not receive Stripe, database, storage, or Infisical credentials.
+
+Recommended Infisical secret names:
+
+```text
+Clerk__PublishableKey
+Clerk__Issuer
+Stripe__SecretKey
+Stripe__Prices__pro
+Stripe__Prices__team
+Stripe__Prices__business
+Stripe__SuccessUrl
+Stripe__CancelUrl
+Billing__RequireActiveSubscription
+BlobSeek__Storage__Accounts__0__ConnectionString
+ConnectionStrings__BlobSeek
+```
+
+Local development with Infisical CLI. This uses the `dev` Infisical environment:
+
+```bash
+infisical login
+infisical init
+infisical run --env=dev --path=/blobseek -- docker compose up --build
+```
+
+Production or CI with a machine identity:
+
+```bash
+export INFISICAL_TOKEN=$(infisical login --method=universal-auth --client-id="$INFISICAL_CLIENT_ID" --client-secret="$INFISICAL_CLIENT_SECRET" --silent --plain)
+infisical run --projectId="$INFISICAL_PROJECT_ID" --env=prod --path=/blobseek -- docker compose up --build
+```
+
+Direct backend loading without the CLI is also supported. Set `Infisical__Enabled=true`, `Infisical__ProjectId`, `Infisical__ClientId`, and `Infisical__ClientSecret` on the API and worker containers. Development defaults to Infisical `dev`; production defaults to `prod`, so dev secrets are not used in production unless you explicitly override `Infisical__Environment`.
+
+If you use Infisical EU Cloud or self-hosting, set `Infisical__ApiUrl` to that API base URL. Never put Infisical client credentials in the frontend.
+
 ## Authentication And Billing
 
 BlobSeek supports a SaaS-ready sign-up and payment flow:
 
 - Clerk powers sign-up, login, sessions, and the protected `/search` console.
+- The frontend receives only `Clerk__PublishableKey` from `/api/public-config`; private keys stay server-side.
 - The frontend sends Clerk bearer tokens to the API when auth is enabled.
 - The API validates Clerk JWTs when `Clerk__Issuer` is configured.
 - Plans are represented by the `BillingPlan` enum: `pro`, `team`, and `business`.
 - Stripe Checkout creates recurring subscriptions through an `IPaymentGateway` implementation, so another provider can be added without changing endpoint code.
+- Checkout uses a client-generated idempotency key, a unique database reservation, a per-process keyed lock, and Stripe idempotency keys to avoid duplicate transactions. The idempotency key is a retry token, not a payment authorization control.
 - Stripe automatic tax and tax ID collection are enabled on checkout sessions.
 - When `Billing__RequireActiveSubscription=true`, search, stats, download, and manual indexing are denied unless the server-side payment access service recognizes the Clerk user as paid.
 

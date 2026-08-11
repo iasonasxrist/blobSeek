@@ -27,7 +27,7 @@ import { createCheckoutSession, createDownloadLink, search, stats, type Checkout
 import { useDebouncedValue } from "./useDebouncedValue";
 
 const limit = 20;
-const clerkEnabled = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.startsWith("pk_")) && !import.meta.env.VITEST;
+const clerkEnabled = "Clerk" in window && !import.meta.env.VITEST;
 
 export function App() {
   if (!window.location.pathname.startsWith("/search")) {
@@ -391,6 +391,10 @@ function SearchConsole({ getAuthToken }: { getAuthToken?: () => Promise<string |
   );
 }
 
+function createIdempotencyKey() {
+  return globalThis.crypto?.randomUUID?.() ?? `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function AuthActions() {
   const buttonClass = "inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold";
 
@@ -496,12 +500,13 @@ function AuthenticatedCheckoutButton({ plan }: { plan: CheckoutPlan }) {
 function CheckoutButton({ plan, getAuthToken }: { plan: CheckoutPlan; getAuthToken?: () => Promise<string | null> }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const idempotencyKey = useMemo(() => createIdempotencyKey(), [plan]);
 
   async function startCheckout() {
     setLoading(true);
     setError(undefined);
     try {
-      window.location.href = await createCheckoutSession(plan, (await getAuthToken?.()) ?? undefined);
+      window.location.href = await createCheckoutSession(plan, idempotencyKey, (await getAuthToken?.()) ?? undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Checkout is not configured yet");
     } finally {

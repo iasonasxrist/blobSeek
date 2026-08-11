@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Security.Claims;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using BlobSeek.Infrastructure.Configuration;
 using BlobSeek.Application.Billing;
 using BlobSeek.Application.Indexing;
 using BlobSeek.Application.Search;
@@ -15,6 +16,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddInfisicalWhenConfigured(builder.Environment);
 
 builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration).WriteTo.Console());
@@ -80,6 +82,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.MapGet("/api/public-config", (IConfiguration configuration) =>
+{
+    var clerkPublishableKey = configuration["Clerk:PublishableKey"] ?? configuration["VITE_CLERK_PUBLISHABLE_KEY"];
+
+    return TypedResults.Ok(new PublicConfigResponse(
+        clerkPublishableKey?.StartsWith("pk_", StringComparison.Ordinal) == true ? clerkPublishableKey : null));
+})
+.WithName("PublicConfig")
+.RequireRateLimiting("api")
+.WithOpenApi();
 
 var api = app.MapGroup("/api").RequireRateLimiting("api");
 if (authEnabled)
@@ -226,5 +239,7 @@ static ProblemHttpResult ToProblem(BillingFailure? failure, string? message) => 
 };
 
 public sealed record DownloadLinkResponse(Uri Url);
+
+public sealed record PublicConfigResponse(string? ClerkPublishableKey);
 
 public partial class Program;

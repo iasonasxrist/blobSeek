@@ -17,4 +17,4 @@ playwright-report/
 work/
 outputs/
 .idea/
-*.json
+.json

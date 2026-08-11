@@ -1,3 +1,13 @@
+export type PublicConfig = {
+  clerkPublishableKey: string | null;
+};
+
+export async function getPublicConfig(): Promise<PublicConfig> {
+  const response = await fetch("/api/public-config", { headers: { Accept: "application/json" } });
+  if (!response.ok) return { clerkPublishableKey: null };
+  return response.json() as Promise<PublicConfig>;
+}
+
 export type SearchHit = {
   documentId: string;
   name: string;
@@ -87,14 +97,14 @@ export async function createDownloadLink(hit: SearchHit, authToken?: string): Pr
 
 export type CheckoutPlan = "pro" | "team" | "business";
 
-export async function createCheckoutSession(plan: CheckoutPlan, authToken?: string): Promise<string> {
+export async function createCheckoutSession(plan: CheckoutPlan, idempotencyKey: string, authToken?: string): Promise<string> {
   const response = await fetch("/api/billing/checkout", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(authHeaders(authToken) ?? {})
     },
-    body: JSON.stringify({ plan })
+    body: JSON.stringify({ plan, idempotencyKey })
   });
   if (!response.ok) throw new Error(`Checkout failed with HTTP ${response.status}`);
   const body = (await response.json()) as { url: string };
