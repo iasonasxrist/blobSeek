@@ -3,17 +3,53 @@ services:
     ports:
       - "5432:5432"
 
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - blobseek_azurite:/data
+
+  azurite-init:
+    image: mcr.microsoft.com/azure-cli:latest
+    depends_on:
+      - azurite
+    entrypoint: /bin/sh
+    command: >
+      -c "sleep 3 &&
+      az storage container create
+      --name documents
+      --connection-string 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNo1k64ctawAS8Q==;BlobEndpoint=http://azurite:10000/devstoreaccount1;'"
+
   api:
     ports:
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Billing__RequireActiveSubscription: "true"
+      BlobSeek__Storage__Accounts__0__Name: local
+      BlobSeek__Storage__Accounts__0__ConnectionString: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNo1k64ctawAS8Q==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      BlobSeek__Storage__Accounts__0__Containers__0: documents
+    depends_on:
+      azurite-init:
+        condition: service_completed_successfully
 
   worker:
     environment:
       DOTNET_ENVIRONMENT: Development
+      BlobSeek__Storage__Accounts__0__Name: local
+      BlobSeek__Storage__Accounts__0__ConnectionString: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNo1k64ctawAS8Q==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      BlobSeek__Storage__Accounts__0__Containers__0: documents
+    depends_on:
+      azurite-init:
+        condition: service_completed_successfully
 
   frontend:
     ports:
       - "5173:80"
+
+volumes:
+  blobseek_azurite:
